@@ -657,11 +657,21 @@ def start():
     except:
         cname = ename.upper()
 
-    try:
-        port = yml['service']['port']
-    except:
-        logging.error('未指定服务端口号！缺省使用80端口。')
-        port = 80
+    if app_profile == 'dev':
+        try:
+            port = yml['service']['port']['dev']
+        except:
+            logging.error('未指定服务端口号！缺省使用80端口。')
+            port = 80
+    elif app_profile == 'prod':
+        try:
+            port = yml['service']['port']['prod']
+        except:
+            logging.error('未指定服务端口号！缺省使用80端口。')
+            port = 80
+    else:
+        logging.error('运行环境必须是dev或prod！')
+        return
 
     if not g.init_global_data():
         logging.error('微服务： {}/{} 初始化失败！'.format(cname, ename))
