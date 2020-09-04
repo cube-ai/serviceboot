@@ -44,8 +44,7 @@ class DataApi(tornado.web.RequestHandler):
                 'status': 'err',
                 'value': 'HTTP请求体错误！' + str(e)
             }
-            res = json.dumps(result, ensure_ascii=False)
-            self.write(res)
+            self.write(result)
             return 
             
         output = {
@@ -61,31 +60,21 @@ class DataApi(tornado.web.RequestHandler):
 
         while not output['finish']:
             await asyncio.sleep(0.01)
-
         result = output['result']
 
-        if isinstance(result['value'], bytes):
-            res = result['value']
-        else:
-            # 特例，针对gateway上的 login 和 logout
-            if g.is_gateway and result['status'] == 'ok':
-                self.set_cookie('access_token', result['value']['access_token'])
-                self.set_cookie('refresh_token', result['value']['refresh_token'])
-            
-            try:
-                res = json.dumps(result, ensure_ascii=False)
-            except Exception as e:
-                logging.error(str(e))
-                result = {
-                    'status': 'err',
-                    'value': 'API调用返回结果序列化失败！' + str(e)
-                }
-                res = json.dumps(result, ensure_ascii=False)
+        # 特例，针对gateway上的 login 和 logout
+        if g.is_gateway and result['status'] == 'ok':
+            self.set_cookie('access_token', result['value']['access_token'])
+            self.set_cookie('refresh_token', result['value']['refresh_token'])
 
         if self.request.headers.get('Origin'):
             self.set_header('Access-Control-Allow-Credentials', 'true')
             self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-        self.write(res)
+
+        if isinstance(result['value'], bytes):
+            self.write(result['value'])
+        else:
+            self.write(result)
 
     async def options(self, *args, **kwargs):
         self.set_status(204)
@@ -188,26 +177,16 @@ class StreamApi(tornado.web.RequestHandler):
 
         while not output['finish']:
             await asyncio.sleep(0.01)
-
         result = output['result']
-
-        if isinstance(result['value'], bytes):
-            res = result['value']
-        else:
-            try:
-                res = json.dumps(result, ensure_ascii=False)
-            except Exception as e:
-                logging.error(str(e))
-                result = {
-                    'status': 'err',
-                    'value': 'API调用返回结果序列化失败！' + str(e)
-                }
-                res = json.dumps(result, ensure_ascii=False)
 
         if self.request.headers.get('Origin'):
             self.set_header('Access-Control-Allow-Credentials', 'true')
             self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-        self.write(res)
+
+        if isinstance(result['value'], bytes):
+            self.write(result['value'])
+        else:
+            self.write(result)
 
     async def options(self, *args, **kwargs):
         self.set_status(204)
@@ -278,12 +257,7 @@ class FileApi(tornado.web.RequestHandler):
                 'status': 'err',
                 'value': 'HTTP文件上传请求体错误！' + str(e)
             }
-            res = json.dumps(result, ensure_ascii=False)
-
-            if self.request.headers.get('Origin'):
-                self.set_header('Access-Control-Allow-Credentials', 'true')
-                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-            self.write(res)
+            self.write(result)
             return 
 
         input = {
@@ -307,26 +281,16 @@ class FileApi(tornado.web.RequestHandler):
 
         while not output['finish']:
             await asyncio.sleep(0.01)
-
         result = output['result']
-
-        if isinstance(result['value'], bytes):
-            res = result['value']
-        else:
-            try:
-                res = json.dumps(result, ensure_ascii=False)
-            except Exception as e:
-                logging.error(str(e))
-                result = {
-                    'status': 'err',
-                    'value': 'API调用返回结果序列化失败！' + str(e)
-                }
-                res = json.dumps(result, ensure_ascii=False)
 
         if self.request.headers.get('Origin'):
             self.set_header('Access-Control-Allow-Credentials', 'true')
             self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-        self.write(res)
+
+        if isinstance(result['value'], bytes):
+            self.write(result['value'])
+        else:
+            self.write(result)
 
     async def options(self, *args, **kwargs):
         self.set_status(204)
@@ -344,7 +308,7 @@ class GatewayApi(tornado.web.RequestHandler):
             'finish': False
         }
         thread = threading.Thread(
-            target=gateway_web_service,
+            target=gateway_service,
             args=(self.request, output)
         )
         thread.setDaemon(True)
@@ -352,43 +316,6 @@ class GatewayApi(tornado.web.RequestHandler):
 
         while not output['finish']:
             await asyncio.sleep(0.01)
-
-        result = output['result']
-
-        if result['status'] == 'ok':
-            new_access_token = result['value'].get('new_access_token')
-            new_refresh_token = result['value'].get('new_refresh_token')
-            response = result['value']['response']
-            if new_access_token is not None and new_refresh_token is not None:
-                self.set_cookie('access_token', new_access_token)
-                self.set_cookie('refresh_token', new_refresh_token)
-
-            self.set_status(response.status_code)
-            self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
-
-            if self.request.headers.get('Origin'):
-                self.set_header('Access-Control-Allow-Credentials', 'true')
-                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-            self.write(response.content)
-        else:
-            self.set_status(500)
-            self.write(result['value'])
-
-    async def post(self, *args, **kwargs):
-        output = {
-            'result': {},
-            'finish': False
-        }
-        thread = threading.Thread(
-            target=gateway_data_service,
-            args=(self.request, output)
-        )
-        thread.setDaemon(True)
-        thread.start()
-
-        while not output['finish']:
-            await asyncio.sleep(0.01)
-
         result = output['result']
 
         if result['status'] == 'ok':
@@ -401,14 +328,49 @@ class GatewayApi(tornado.web.RequestHandler):
                 self.set_cookie('refresh_token', new_refresh_token)
 
             self.set_status(response.status_code)
-            try:
-                json.loads(response.text, encoding='utf-8')
-            except:
-                self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
+            self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
 
             if self.request.headers.get('Origin'):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
                 self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+
+            self.write(response.content)
+        else:
+            self.set_status(500)
+            self.write(result['value'])
+
+    async def post(self, *args, **kwargs):
+        output = {
+            'result': {},
+            'finish': False
+        }
+        thread = threading.Thread(
+            target=gateway_service,
+            args=(self.request, output)
+        )
+        thread.setDaemon(True)
+        thread.start()
+
+        while not output['finish']:
+            await asyncio.sleep(0.01)
+        result = output['result']
+
+        if result['status'] == 'ok':
+            new_access_token = result['value'].get('new_access_token')  # 用 get 而不是 [] 来取值，因为可能不存在
+            new_refresh_token = result['value'].get('new_refresh_token')
+            response = result['value']['response']
+
+            if new_access_token is not None and new_refresh_token is not None:
+                self.set_cookie('access_token', new_access_token)
+                self.set_cookie('refresh_token', new_refresh_token)
+
+            self.set_status(response.status_code)
+            self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
+
+            if self.request.headers.get('Origin'):
+                self.set_header('Access-Control-Allow-Credentials', 'true')
+                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+
             self.write(response.content)
         else:
             self.set_status(500)
@@ -423,21 +385,7 @@ class GatewayApi(tornado.web.RequestHandler):
         self.set_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
 
 
-def gateway_web_service(prev_request, output):
-    result = {}
-    try:
-        result['value'] = g.app_core.get_web_file(prev_request)
-        result['status'] = 'ok'
-    except Exception as e:
-        logging.error(str(e))
-        result['value'] = str(e)
-        result['status'] = 'err'
-
-    output['result'] = result
-    output['finish'] = True
-
-
-def gateway_data_service(prev_request, output):
+def gateway_service(prev_request, output):
     result = {}
     try:
         result['value'] = g.app_core.forward_request(prev_request)
@@ -467,7 +415,6 @@ class SpecialApi(tornado.web.RequestHandler):
 
         while not output['finish']:
             await asyncio.sleep(0.01)
-
         result = output['result']
 
         if result['status'] == 'ok':
@@ -493,7 +440,6 @@ class SpecialApi(tornado.web.RequestHandler):
 
         while not output['finish']:
             await asyncio.sleep(0.01)
-
         result = output['result']
 
         if result['status'] == 'ok':
@@ -526,96 +472,6 @@ def special_service(request, output):
 
     output['result'] = result
     output['finish'] = True
-
-
-class SpecialGatewayApi(tornado.web.RequestHandler):
-
-    async def get(self, *args, **kwargs):
-        output = {
-            'result': {},
-            'finish': False
-        }
-        thread = threading.Thread(
-            target=gateway_data_service,
-            args=(self.request, output)
-        )
-        thread.setDaemon(True)
-        thread.start()
-
-        while not output['finish']:
-            await asyncio.sleep(0.01)
-
-        result = output['result']
-
-        if result['status'] == 'ok':
-            new_access_token = result['value'].get('new_access_token')  # 用 get 而不是 [] 来取值，因为可能不存在
-            new_refresh_token = result['value'].get('new_refresh_token')
-            response = result['value']['response']
-            if new_access_token is not None and new_refresh_token is not None:
-                self.set_cookie('access_token', new_access_token)
-                self.set_cookie('refresh_token', new_refresh_token)
-
-            self.set_status(response.status_code)
-            try:
-                json.loads(response.text, encoding='utf-8')
-            except:
-                self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
-
-            if self.request.headers.get('Origin'):
-                self.set_header('Access-Control-Allow-Credentials', 'true')
-                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-            self.write(response.content)
-        else:
-            self.set_status(500)
-            self.write(result['value'])
-
-    async def post(self, *args, **kwargs):
-        output = {
-            'result': {},
-            'finish': False
-        }
-        thread = threading.Thread(
-            target=gateway_data_service,
-            args=(self.request, output)
-        )
-        thread.setDaemon(True)
-        thread.start()
-
-        while not output['finish']:
-            await asyncio.sleep(0.01)
-
-        result = output['result']
-
-        if result['status'] == 'ok':
-            new_access_token = result['value'].get('new_access_token')  # 用 get 而不是 [] 来取值，因为可能不存在
-            new_refresh_token = result['value'].get('new_refresh_token')
-            response = result['value']['response']
-
-            if new_access_token is not None and new_refresh_token is not None:
-                self.set_cookie('access_token', new_access_token)
-                self.set_cookie('refresh_token', new_refresh_token)
-
-            self.set_status(response.status_code)
-            try:
-                json.loads(response.text, encoding='utf-8')
-            except:
-                self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
-
-            if self.request.headers.get('Origin'):
-                self.set_header('Access-Control-Allow-Credentials', 'true')
-                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-            self.write(response.content)
-        else:
-            self.set_status(500)
-            self.write(result['value'])
-
-    async def options(self, *args, **kwargs):
-        # 允许跨域
-        self.set_status(204)
-        self.set_header('Access-Control-Allow-Credentials', 'true')
-        self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
-        self.set_header("Access-Control-Allow-Headers", "content-type")
-        self.set_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
 
 
 class HealthChecker(tornado.web.RequestHandler):
@@ -687,7 +543,6 @@ def start():
         g.is_gateway = True
         handlers = [
             (r'/management/health', HealthChecker),
-            (r'/special/(.*)', SpecialGatewayApi),
             (r'/api/data', DataApi),
             (r'/(.*)', GatewayApi),
         ]
