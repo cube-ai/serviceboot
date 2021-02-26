@@ -7,6 +7,7 @@ import asyncio
 import threading
 import tornado.web
 import tornado.ioloop
+import tornado.websocket
 import tornado.httpserver
 from tornado.httputil import HTTPHeaders
 
@@ -330,9 +331,23 @@ class GatewayApi(tornado.web.RequestHandler):
             self.set_status(response.status_code)
             self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
 
+            if self._headers.get('Content-Type') == 'gzip':
+                try:
+                    self._headers.pop('Content-Type')
+                    self._headers.pop('Content-Length')
+                except:
+                    pass
+
             if self.request.headers.get('Origin'):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
                 self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+
+            if self._status_code in (204, 304) or 100 <= self._status_code < 200:
+                # 这些状态下response中不能有body，所以不应该write
+                return
+
+            if self._headers.get('Content-Length') is not None:
+                self.set_header('Content-Length', len(response.content))
 
             self.write(response.content)
         else:
@@ -371,10 +386,97 @@ class GatewayApi(tornado.web.RequestHandler):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
                 self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
 
+            if self._status_code in (204, 304) or 100 <= self._status_code < 200:
+                # 这些状态下response中不能有body，所以不应该write
+                return
+
             self.write(response.content)
         else:
             self.set_status(500)
             self.write(result['value'])
+
+    async def put(self, *args, **kwargs):
+        output = {
+            'result': {},
+            'finish': False
+        }
+        thread = threading.Thread(
+            target=gateway_service,
+            args=(self.request, output)
+        )
+        thread.setDaemon(True)
+        thread.start()
+
+        while not output['finish']:
+            await asyncio.sleep(0.01)
+        result = output['result']
+
+        if result['status'] == 'ok':
+            new_access_token = result['value'].get('new_access_token')  # 用 get 而不是 [] 来取值，因为可能不存在
+            new_refresh_token = result['value'].get('new_refresh_token')
+            response = result['value']['response']
+
+            if new_access_token is not None and new_refresh_token is not None:
+                self.set_cookie('access_token', new_access_token)
+                self.set_cookie('refresh_token', new_refresh_token)
+
+            self.set_status(response.status_code)
+            self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
+
+            if self.request.headers.get('Origin'):
+                self.set_header('Access-Control-Allow-Credentials', 'true')
+                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+
+            if self._status_code in (204, 304) or 100 <= self._status_code < 200:
+                # 这些状态下response中不能有body，所以不应该write
+                return
+
+            self.write(response.content)
+        else:
+            self.set_status(500)
+            self.write(result['value'])
+
+    async def delete(self, *args, **kwargs):
+        output = {
+            'result': {},
+            'finish': False
+        }
+        thread = threading.Thread(
+            target=gateway_service,
+            args=(self.request, output)
+        )
+        thread.setDaemon(True)
+        thread.start()
+
+        while not output['finish']:
+            await asyncio.sleep(0.01)
+        result = output['result']
+
+        if result['status'] == 'ok':
+            new_access_token = result['value'].get('new_access_token')  # 用 get 而不是 [] 来取值，因为可能不存在
+            new_refresh_token = result['value'].get('new_refresh_token')
+            response = result['value']['response']
+
+            if new_access_token is not None and new_refresh_token is not None:
+                self.set_cookie('access_token', new_access_token)
+                self.set_cookie('refresh_token', new_refresh_token)
+
+            self.set_status(response.status_code)
+            self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
+
+            if self.request.headers.get('Origin'):
+                self.set_header('Access-Control-Allow-Credentials', 'true')
+                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+
+            if self._status_code in (204, 304) or 100 <= self._status_code < 200:
+                # 这些状态下response中不能有body，所以不应该write
+                return
+
+            self.write(response.content)
+        else:
+            self.set_status(500)
+            self.write(result['value'])
+
 
     async def options(self, *args, **kwargs):
         # 允许跨域
@@ -382,7 +484,7 @@ class GatewayApi(tornado.web.RequestHandler):
         self.set_header('Access-Control-Allow-Credentials', 'true')
         self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
         self.set_header("Access-Control-Allow-Headers", "content-type")
-        self.set_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.set_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
 
 
 def gateway_service(prev_request, output):
@@ -451,13 +553,63 @@ class SpecialApi(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(result['value'])
 
+    async def put(self, *args, **kwargs):
+        output = {
+            'result': {},
+            'finish': False
+        }
+        thread = threading.Thread(
+            target=special_service,
+            args=(self.request, output)
+        )
+        thread.setDaemon(True)
+        thread.start()
+
+        while not output['finish']:
+            await asyncio.sleep(0.01)
+        result = output['result']
+
+        if result['status'] == 'ok':
+            if self.request.headers.get('Origin'):
+                self.set_header('Access-Control-Allow-Credentials', 'true')
+                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+            self.write(result['value'])
+        else:
+            self.set_status(400)
+            self.write(result['value'])
+
+    async def delete(self, *args, **kwargs):
+        output = {
+            'result': {},
+            'finish': False
+        }
+        thread = threading.Thread(
+            target=special_service,
+            args=(self.request, output)
+        )
+        thread.setDaemon(True)
+        thread.start()
+
+        while not output['finish']:
+            await asyncio.sleep(0.01)
+        result = output['result']
+
+        if result['status'] == 'ok':
+            if self.request.headers.get('Origin'):
+                self.set_header('Access-Control-Allow-Credentials', 'true')
+                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+            self.write(result['value'])
+        else:
+            self.set_status(400)
+            self.write(result['value'])
+
     async def options(self, *args, **kwargs):
         # 允许跨域
         self.set_status(204)
         self.set_header('Access-Control-Allow-Credentials', 'true')
         self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
         self.set_header("Access-Control-Allow-Headers", "content-type")
-        self.set_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.set_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
 
 
 def special_service(request, output):
@@ -472,6 +624,62 @@ def special_service(request, output):
 
     output['result'] = result
     output['finish'] = True
+
+
+class WebSocketHub(tornado.websocket.WebSocketHandler):
+    topic_connections = {}
+
+    def open(self):
+        pass
+
+    def on_message(self, message):
+        try:
+            msg = json.loads(message, encoding='utf-8')
+        except Exception as e:
+            logging.error(str(e))
+            logging.error('WebSocket消息必须采用JSON格式！')
+            return
+
+        if msg.get('type') == 'subscribe':
+            if getattr(self, 'topic', None) is not None:
+                logging.error('WebSocket已订阅过主题，不能更改！')
+                return
+
+            self.topic = msg.get('content')
+            if self.topic is not None:
+                connections = self.topic_connections.get(self.topic)
+                if connections is None:
+                    self.topic_connections[self.topic] = [self]
+                else:
+                    connections.append(self)
+                logging.critical('New WebSocket connection opened for topic: {}'.format(self.topic))
+                self.write_message({
+                    'type': 'welcome',
+                    'content': 'New WebSocket connection opened for topic: {}'.format(self.topic),
+                })
+            else:
+                logging.error('Invalid WebSocket topic : None')
+                self.close()
+        else:
+            topic = msg.get('topic')
+            if topic is None:
+                return
+            # 转发消息
+            connections = self.topic_connections.get(topic)
+            if isinstance(connections, list):
+                for conn in connections:
+                    conn.write_message(msg)
+
+    def on_close(self):
+        connections = self.topic_connections.get(self.topic)
+        if isinstance(connections, list):
+            connections.pop(connections.index(self))
+            if len(connections) == 0:
+                self.topic_connections.pop(self.topic)
+            logging.critical('WebSocket connection subscribed to topic: {} closed'.format(self.topic))
+
+    def check_origin(self, origin):
+        return True
 
 
 class HealthChecker(tornado.web.RequestHandler):
@@ -544,6 +752,7 @@ def start():
         handlers = [
             (r'/management/health', HealthChecker),
             (r'/api/data', DataApi),
+            (r'/websocket', WebSocketHub),
             (r'/(.*)', GatewayApi),
         ]
     else:

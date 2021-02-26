@@ -134,12 +134,12 @@ def build_docker():
         os.system('cp -rf ./app ./temp/')
 
     if build_web:
-        if os.path.exists('./webapp/bpp'):
+        if os.path.exists('./webapp/src'):
             cwd = os.getcwd()
             os.chdir(os.path.join(cwd, 'webapp'))
             if not os.path.exists('./node_modules'):
-                os.system('yarn install')
-            os.system('yarn webpack:prod')
+                os.system('npm install')
+            os.system('ng build --prod')
             os.chdir(cwd)
         if os.path.exists('./webapp/www'):
             os.system('mkdir temp/webapp')

@@ -1,16 +1,19 @@
-# ServiceBoot
+# ServiceBoot —— Python云原生微服务开发框架
 
-史上最牛的Python微服务框架 —— ServiceBoot，比 SpringBoot 好用100倍 ^-^
+Python云原生微服务开发框架
 
-依赖包地址： 
+---
+
+## 依赖包地址 
 
 - https://pypi.org/project/serviceboot
 
-使用pip安装:
+## 依赖包引用
 
     $ pip install serviceboot
 
-### 微服务应用开发实例
+### 应用开发实例
 
-- CubeAI智立方： https://github.com/cube-ai/cubeai
+- CubeAI智立方
 
+    - https://github.com/cube-ai/cubeai
