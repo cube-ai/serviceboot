@@ -349,10 +349,16 @@ class GatewayApi(tornado.web.RequestHandler):
             if self._headers.get('Content-Length') is not None:
                 self.set_header('Content-Length', len(response.content))
 
-            self.write(response.content)
+            if response.status_code != 500:
+                self.write(response.content)
+            else:
+                if self._headers.get('Content-Length') is not None:
+                    self._headers.pop('Content-Length')
+                self.write('服务未启动！')
         else:
             self.set_status(500)
-            self.write(result['value'])
+            # self.write(result['value'])
+            self.write('服务未启动！')
 
     async def post(self, *args, **kwargs):
         output = {
