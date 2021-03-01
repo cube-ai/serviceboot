@@ -1,6 +1,6 @@
-# ServiceBoot —— Python云原生微服务开发框架
+# ServiceBoot
 
-Python云原生微服务开发框架
+Python微服务开发框架
 
 ---
 
