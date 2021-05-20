@@ -12,6 +12,7 @@ import tornado.httpserver
 from tornado.httputil import HTTPHeaders
 
 import os, sys
+
 sys.path.append(os.getcwd())
 from app.app_core import AppCore
 
@@ -46,8 +47,8 @@ class DataApi(tornado.web.RequestHandler):
                 'value': 'HTTP请求体错误！' + str(e)
             }
             self.write(result)
-            return 
-            
+            return
+
         output = {
             'result': {},
             'finish': False
@@ -152,7 +153,7 @@ class StreamApi(tornado.web.RequestHandler):
         if '/' in path:
             i = path.find('/')
             action = path[:i]
-            path_arg = path[i+1:]
+            path_arg = path[i + 1:]
         else:
             action = path
             path_arg = None
@@ -198,7 +199,6 @@ class StreamApi(tornado.web.RequestHandler):
 
 
 def stream_service(input, output):
-
     action = input.get('action')
     args = input.get('args')
 
@@ -244,11 +244,11 @@ class FileApi(tornado.web.RequestHandler):
         if '/' in path:
             i = path.find('/')
             action = path[:i]
-            path_arg = path[i+1:]
+            path_arg = path[i + 1:]
         else:
             action = path
             path_arg = None
-        
+
         try:
             file_obj = self.request.files.get(action)[0]
             file_body = file_obj.body
@@ -259,7 +259,7 @@ class FileApi(tornado.web.RequestHandler):
                 'value': 'HTTP文件上传请求体错误！' + str(e)
             }
             self.write(result)
-            return 
+            return
 
         input = {
             'action': action,
@@ -338,6 +338,12 @@ class GatewayApi(tornado.web.RequestHandler):
                 except:
                     pass
 
+            if self._headers.get('Transfer-Encoding'):
+                self._headers.pop('Transfer-Encoding')
+
+            if self._headers.get('Content-Length') is not None:
+                self.set_header('Content-Length', len(response.content))
+
             if self.request.headers.get('Origin'):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
                 self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
@@ -345,9 +351,6 @@ class GatewayApi(tornado.web.RequestHandler):
             if self._status_code in (204, 304) or 100 <= self._status_code < 200:
                 # 这些状态下response中不能有body，所以不应该write
                 return
-
-            if self._headers.get('Content-Length') is not None:
-                self.set_header('Content-Length', len(response.content))
 
             if response.status_code != 500:
                 self.write(response.content)
@@ -387,6 +390,19 @@ class GatewayApi(tornado.web.RequestHandler):
 
             self.set_status(response.status_code)
             self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
+
+            if self._headers.get('Content-Type') == 'gzip':
+                try:
+                    self._headers.pop('Content-Type')
+                    self._headers.pop('Content-Length')
+                except:
+                    pass
+
+            if self._headers.get('Transfer-Encoding'):
+                self._headers.pop('Transfer-Encoding')
+
+            if self._headers.get('Content-Length') is not None:
+                self.set_header('Content-Length', len(response.content))
 
             if self.request.headers.get('Origin'):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
@@ -429,6 +445,19 @@ class GatewayApi(tornado.web.RequestHandler):
             self.set_status(response.status_code)
             self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
 
+            if self._headers.get('Content-Type') == 'gzip':
+                try:
+                    self._headers.pop('Content-Type')
+                    self._headers.pop('Content-Length')
+                except:
+                    pass
+
+            if self._headers.get('Transfer-Encoding'):
+                self._headers.pop('Transfer-Encoding')
+
+            if self._headers.get('Content-Length') is not None:
+                self.set_header('Content-Length', len(response.content))
+
             if self.request.headers.get('Origin'):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
                 self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
@@ -470,6 +499,19 @@ class GatewayApi(tornado.web.RequestHandler):
             self.set_status(response.status_code)
             self._headers = HTTPHeaders(response.headers)  # 注意：需要强制类型转换
 
+            if self._headers.get('Content-Type') == 'gzip':
+                try:
+                    self._headers.pop('Content-Type')
+                    self._headers.pop('Content-Length')
+                except:
+                    pass
+
+            if self._headers.get('Transfer-Encoding'):
+                self._headers.pop('Transfer-Encoding')
+
+            if self._headers.get('Content-Length') is not None:
+                self.set_header('Content-Length', len(response.content))
+
             if self.request.headers.get('Origin'):
                 self.set_header('Access-Control-Allow-Credentials', 'true')
                 self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
@@ -482,7 +524,6 @@ class GatewayApi(tornado.web.RequestHandler):
         else:
             self.set_status(500)
             self.write(result['value'])
-
 
     async def options(self, *args, **kwargs):
         # 允许跨域
@@ -632,6 +673,60 @@ def special_service(request, output):
     output['finish'] = True
 
 
+class ThirdPartyOauthApi(tornado.web.RequestHandler):
+
+    async def get(self, *args, **kwargs):
+        output = {
+            'result': {},
+            'finish': False
+        }
+        thread = threading.Thread(
+            target=third_party_oauth_service,
+            args=(self.request, output)
+        )
+        thread.setDaemon(True)
+        thread.start()
+
+        while not output['finish']:
+            await asyncio.sleep(0.01)
+        result = output['result']
+
+        if result['status'] == 'ok':
+            if self.request.headers.get('Origin'):
+                self.set_header('Access-Control-Allow-Credentials', 'true')
+                self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+
+            self.set_cookie('access_token', result['value']['access_token'])
+            self.set_cookie('refresh_token', result['value']['refresh_token'])
+            self.set_header('Location', '/')
+            self.set_status(302)
+        else:
+            self.set_status(400)
+            self.write(result['value'])
+
+    async def options(self, *args, **kwargs):
+        # 允许跨域
+        self.set_status(204)
+        self.set_header('Access-Control-Allow-Credentials', 'true')
+        self.set_header('Access-Control-Allow-Origin', self.request.headers.get('Origin'))
+        self.set_header("Access-Control-Allow-Headers", "content-type")
+        self.set_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+
+
+def third_party_oauth_service(request, output):
+    result = {}
+    try:
+        result['value'] = g.app_core.third_party_oauth(request)
+        result['status'] = 'ok'
+    except Exception as e:
+        logging.error(str(e))
+        result['value'] = str(e)
+        result['status'] = 'err'
+
+    output['result'] = result
+    output['finish'] = True
+
+
 class WebSocketHub(tornado.websocket.WebSocketHandler):
     topic_connections = {}
 
@@ -715,7 +810,7 @@ def start():
     except:
         logging.error('服务配置文件application.yml不存在！')
         return
-    
+
     try:
         ename = yml['service']['ename']
     except:
@@ -758,6 +853,7 @@ def start():
         handlers = [
             (r'/management/health', HealthChecker),
             (r'/api/data', DataApi),
+            (r'/oauth/(.*)', ThirdPartyOauthApi),
             (r'/websocket', WebSocketHub),
             (r'/(.*)', GatewayApi),
         ]
@@ -775,7 +871,7 @@ def start():
         handlers=handlers,
         debug=('dev' == app_profile)
     )
-    http_server = tornado.httpserver.HTTPServer(app, max_buffer_size=1000*1024*1024)
+    http_server = tornado.httpserver.HTTPServer(app, max_buffer_size=1000 * 1024 * 1024)
     http_server.listen(port)
 
     logging.critical('##################################################')

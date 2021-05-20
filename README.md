@@ -1,8 +1,4 @@
-# ServiceBoot
-
-Python微服务开发框架
-
----
+# ServiceBoot —— Python微服务开发框架
 
 ## 依赖包地址 
 
@@ -16,4 +12,4 @@ Python微服务开发框架
 
 - CubeAI智立方
 
-    - https://github.com/cube-ai/cubeai
+    - https://code.ihub.org.cn/projects/348
